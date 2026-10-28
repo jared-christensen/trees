@@ -85,6 +85,10 @@ func Classify(f Facts) (State, []string) {
 	switch {
 	case f.MergedPR > 0:
 		why = append(why, fmt.Sprintf("PR #%d merged", f.MergedPR))
+		if f.OwnCommits && !f.Merged {
+			// The PR merged, but git sees work here that never landed.
+			why = append(why, "has changes not in "+f.Base)
+		}
 	case f.Merged && state == SafeToDelete:
 		why = append(why, "merged into "+f.Base)
 	}
