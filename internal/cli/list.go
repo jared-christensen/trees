@@ -13,6 +13,7 @@ type listOptions struct {
 	NoFetch bool
 	NoPR    bool
 	Color   bool
+	JSON    bool
 }
 
 // runList prints the report for the repository containing cwd and returns
@@ -26,6 +27,13 @@ func runList(ctx context.Context, cwd string, out, errOut io.Writer, opt listOpt
 	if err != nil {
 		fmt.Fprintln(errOut, err)
 		return 1
+	}
+	if opt.JSON {
+		if err := report.JSON(out, inv, items); err != nil {
+			fmt.Fprintln(errOut, err)
+			return 1
+		}
+		return 0
 	}
 	report.Render(out, inv, items, opt.Color)
 	return 0

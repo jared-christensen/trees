@@ -68,6 +68,7 @@ func newRootCmd(version string, s streams) *cobra.Command {
 	addListFlags := func(cmd *cobra.Command) {
 		cmd.Flags().BoolVar(&listOpt.NoFetch, "no-fetch", false, "use what was last fetched instead of fetching")
 		cmd.Flags().BoolVar(&listOpt.NoPR, "no-pr", false, "skip pull request lookups")
+		cmd.Flags().BoolVar(&listOpt.JSON, "json", false, "print the report as JSON")
 	}
 
 	root := &cobra.Command{
