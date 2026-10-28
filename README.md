@@ -18,10 +18,16 @@ go install github.com/jared-christensen/trees/cmd/trees@latest
 
 ## Shell setup
 
-`trees switch` and `trees create` change your directory, which a program can't do on its own. Add this to your `~/.zshrc` (or `~/.bashrc` with `bash`):
+`trees switch` and `trees create` change your directory, which a program can't do on its own. Add this to your `~/.zshrc`:
 
 ```sh
 eval "$(trees init zsh)"
+```
+
+Or, for bash, to your `~/.bashrc`:
+
+```sh
+eval "$(trees init bash)"
 ```
 
 ## Usage
@@ -53,24 +59,26 @@ Branches not in any worktree
 | Command | What it does |
 | --- | --- |
 | `trees` / `trees list` | Show worktrees and branches and which are safe to delete. `--no-fetch` skips fetching, `--no-pr` skips pull request lookups. |
-| `trees clean` | Delete the safe-to-delete worktrees and branches after listing them and asking. `-y` skips the question, `--no-pr` skips pull request lookups. Remote branches are never touched. Each deletion prints a `git branch` command to restore it. |
-| `trees create <branch>` | Make a worktree and branch with matching names (from the up-to-date main branch), run any configured `setup` commands, and go there. |
+| `trees clean` | Delete the safe-to-delete worktrees and branches after listing them and asking. It needs a successful fetch first, and deletes nothing if the remote can't be reached. It skips locked worktrees, the main checkout, the worktree you're in, and long-lived branches (`main`, `master`, `develop`, `trunk`). Before asking, it lists any ignored files (such as `.env`) that removing a folder will delete. `-y` skips the question, `--no-pr` skips pull request lookups. Remote branches are never touched. Each deletion prints a `git branch` command to restore it. |
+| `trees create <branch>` | Make a worktree and branch with matching names, run any configured `setup` commands, and go there. A new branch starts from the main branch after a fetch (`origin/main`, not a possibly outdated local `main`; if the remote can't be reached, from what was last fetched). If the branch already exists, locally or only on the remote, that branch is reused instead. |
 | `trees switch <name>` | Go to a worktree by branch or folder name. |
 | `trees init <zsh\|bash>` | Print the shell function that lets `create` and `switch` change directories. |
 
 `-C <path>` runs any command as if `trees` was started in that directory.
 
+The bare-repo layout (the repository in `.bare` with a `.git` file pointing at it, and every branch in its own worktree) works too: `list`, `clean` and `switch` treat it as a repo with no main checkout.
+
 ## How states are decided
 
 Rules are checked in this order, and the first match wins:
 
-1. Uncommitted changes or an open PR: **still in use**.
-2. No commits of its own: **still in use**, or **stale** once it is older than `stale_days`.
+1. Uncommitted changes, an open PR, a worktree `trees` couldn't check, or a long-lived branch (`main`, `master`, `develop`, `trunk`): **still in use**.
+2. No commits of its own: **still in use**, or **stale** once it is older than `stale_days` (counted from when the branch was created or last moved, not from its last commit).
 3. Merged into the main branch (by git): **safe to delete**.
 4. Closed PR, or older than `stale_days`: **stale, take a look**.
 5. Anything else: **still in use**.
 
-A merged PR also counts as a reason, and `trees list` always prints the reasons next to the state. Pull request lookups use the [GitHub CLI](https://cli.github.com) (`gh`) when it is installed; without it, or with `--no-pr`, only the git checks apply.
+A merged PR is shown as a reason, but a merged PR alone never makes a branch safe to delete: only the git check in rule 3 does. If the PR merged but the branch has changes that aren't in the main branch, the reasons say so. `trees list` always prints the reasons next to the state. Pull request lookups use the [GitHub CLI](https://cli.github.com) (`gh`) when it is installed; without it, or with `--no-pr`, only the git checks apply.
 
 ## Config
 
