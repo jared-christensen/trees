@@ -80,22 +80,60 @@ func TestIsMergedErrorsOnBadRef(t *testing.T) {
 	}
 }
 
+func own(r *gittest.Repo, branch string) bool {
+	return merged.HasOwnCommits(context.Background(), git.Runner{Dir: r.Main}, "origin/main", branch)
+}
+
 func TestHasOwnCommits(t *testing.T) {
 	r := gittest.New(t)
 	wt := r.AddWorktree("feat")
-	run := git.Runner{Dir: r.Main}
-	if merged.HasOwnCommits(context.Background(), run, "feat") {
+	if own(r, "feat") {
 		t.Fatal("fresh branch should have no own commits")
 	}
 	r.Commit(wt, "a.txt", "a")
-	if !merged.HasOwnCommits(context.Background(), run, "feat") {
+	if !own(r, "feat") {
 		t.Fatal("branch with a commit should have own commits")
 	}
 }
 
-func TestHasOwnCommitsNoReflog(t *testing.T) {
+func TestHasOwnCommitsFastForwardIsNotOwn(t *testing.T) {
 	r := gittest.New(t)
-	if !merged.HasOwnCommits(context.Background(), git.Runner{Dir: r.Main}, "does-not-exist") {
-		t.Fatal("no reflog should assume work")
+	wt := r.AddWorktree("feat")
+	r.Commit(r.Main, "other.txt", "other")
+	r.Git(r.Main, "push", "origin", "main")
+	r.Git(r.Main, "fetch")
+	r.Git(wt, "merge", "--ff-only", "origin/main")
+	if own(r, "feat") {
+		t.Fatal("fast-forward from base is not own work")
+	}
+}
+
+func TestHasOwnCommitsMergedWithMergeCommit(t *testing.T) {
+	r := gittest.New(t)
+	wt := r.AddWorktree("feat")
+	r.Commit(wt, "a.txt", "a")
+	r.Merge("feat")
+	r.Git(r.Main, "fetch")
+	if !own(r, "feat") {
+		t.Fatal("local commit merged with --no-ff is still own work")
+	}
+}
+
+func TestHasOwnCommitsTrackedRemoteWork(t *testing.T) {
+	r := gittest.New(t)
+	wt := r.AddWorktree("tmp")
+	r.Commit(wt, "x.txt", "x")
+	r.Git(wt, "push", "origin", "HEAD:refs/heads/x")
+	r.Git(r.Main, "fetch")
+	r.Git(r.Main, "branch", "--track", "x", "origin/x")
+	if !own(r, "x") {
+		t.Fatal("work pulled from a remote branch not on base is own work")
+	}
+}
+
+func TestHasOwnCommitsMissingBranch(t *testing.T) {
+	r := gittest.New(t)
+	if own(r, "does-not-exist") {
+		t.Fatal("missing branch must be false")
 	}
 }

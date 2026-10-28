@@ -50,19 +50,57 @@ func IsMerged(ctx context.Context, r git.Runner, base, branch string) (bool, err
 	return tree != "" && tree == strings.TrimSpace(baseTree), nil
 }
 
-// HasOwnCommits reports whether branch has moved since it was created. The
-// oldest reflog entry is the sha the branch started at; if the tip differs,
-// the branch has its own commits. With no reflog it assumes there is work.
-func HasOwnCommits(ctx context.Context, r git.Runner, branch string) bool {
-	out, err := r.Run(ctx, "reflog", "show", "--format=%H", "refs/heads/"+branch)
-	if err != nil || strings.TrimSpace(out) == "" {
-		return true
-	}
-	lines := strings.Split(out, "\n")
-	oldest := strings.TrimSpace(lines[len(lines)-1])
-	tip, err := r.Run(ctx, "rev-parse", "refs/heads/"+branch)
+// HasOwnCommits reports whether branch carries work of its own, so that a
+// branch that is merely level with or behind base is not mistaken for finished
+// work. It is true when either:
+//
+//	(a) the branch's reflog records a commit-creating entry (commit, cherry-pick,
+//	    revert, am), which catches local work even after it was merged with a
+//	    merge commit; or
+//	(b) the current tip or any sha the branch has pointed at is not an ancestor
+//	    of base, which catches work pulled from elsewhere that was later
+//	    squash-merged.
+//
+// A fast-forward from base hits neither. Any git error, or an empty reflog
+// with the tip reachable from base, returns false: the never-deletable
+// direction.
+func HasOwnCommits(ctx context.Context, r git.Runner, base, branch string) bool {
+	ref := "refs/heads/" + branch
+	tip, err := r.Run(ctx, "rev-parse", "--verify", ref)
 	if err != nil {
-		return true
+		return false
 	}
-	return oldest != strings.TrimSpace(tip)
+	subjects, err := r.Run(ctx, "reflog", "show", "--format=%gs", ref)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(subjects, "\n") {
+		for _, p := range []string{"commit", "cherry-pick", "revert", "am"} {
+			if strings.HasPrefix(line, p) {
+				return true
+			}
+		}
+	}
+	shas, err := r.Run(ctx, "reflog", "show", "--format=%H", ref)
+	if err != nil {
+		return false
+	}
+	candidates := append(strings.Split(shas, "\n"), tip)
+	seen := map[string]bool{}
+	for _, sha := range candidates {
+		sha = strings.TrimSpace(sha)
+		if sha == "" || seen[sha] {
+			continue
+		}
+		seen[sha] = true
+		_, err := r.Run(ctx, "merge-base", "--is-ancestor", sha, base)
+		if err == nil {
+			continue
+		}
+		if exitCode(err) == 1 {
+			return true
+		}
+		return false
+	}
+	return false
 }
