@@ -52,17 +52,20 @@ func IsMerged(ctx context.Context, r git.Runner, base, branch string) (bool, err
 
 // HasOwnCommits reports whether branch carries work of its own, so that a
 // branch that is merely level with or behind base is not mistaken for finished
-// work. It is true when either:
+// work. It is true when any of these holds:
 //
 //	(a) the branch's reflog records a commit-creating entry (commit, cherry-pick,
 //	    revert, am), which catches local work even after it was merged with a
-//	    merge commit; or
+//	    merge commit;
 //	(b) the current tip or any sha the branch has pointed at is not an ancestor
 //	    of base, which catches work pulled from elsewhere that was later
-//	    squash-merged.
+//	    squash-merged; or
+//	(c) the tip is an ancestor of base but not on base's first-parent history,
+//	    so it arrived through a merge commit; this catches merged branches whose
+//	    reflog has expired or never recorded the commits (a teammate's branch).
 //
-// A fast-forward from base hits neither. Any git error, or an empty reflog
-// with the tip reachable from base, returns false: the never-deletable
+// A fast-forward from base hits none of these: its tip is on base's
+// first-parent history. Any git error returns false: the never-deletable
 // direction.
 func HasOwnCommits(ctx context.Context, r git.Runner, base, branch string) bool {
 	ref := "refs/heads/" + branch
@@ -102,5 +105,16 @@ func HasOwnCommits(ctx context.Context, r git.Runner, base, branch string) bool 
 		}
 		return false
 	}
-	return false
+	// Every candidate, the tip included, is an ancestor of base.
+	firstParent, err := r.Run(ctx, "rev-list", "--first-parent", base)
+	if err != nil {
+		return false
+	}
+	tip = strings.TrimSpace(tip)
+	for _, sha := range strings.Split(firstParent, "\n") {
+		if strings.TrimSpace(sha) == tip {
+			return false
+		}
+	}
+	return true
 }

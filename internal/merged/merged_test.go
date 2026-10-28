@@ -137,3 +137,42 @@ func TestHasOwnCommitsMissingBranch(t *testing.T) {
 		t.Fatal("missing branch must be false")
 	}
 }
+
+func TestHasOwnCommitsMergeCommitAfterReflogExpired(t *testing.T) {
+	r := gittest.New(t)
+	wt := r.AddWorktree("feat")
+	r.Commit(wt, "a.txt", "a")
+	r.Merge("feat")
+	r.Git(r.Main, "fetch")
+	r.Git(r.Main, "reflog", "expire", "--expire=now", "--all")
+	if !own(r, "feat") {
+		t.Fatal("branch merged with --no-ff is own work even with no reflog")
+	}
+}
+
+func TestHasOwnCommitsTrackedRemoteWorkMergedWithMergeCommit(t *testing.T) {
+	r := gittest.New(t)
+	wt := r.AddWorktree("tmp")
+	r.Commit(wt, "x.txt", "x")
+	r.Git(wt, "push", "origin", "HEAD:refs/heads/x")
+	r.Git(r.Main, "fetch")
+	r.Git(r.Main, "branch", "--track", "x", "origin/x")
+	r.Merge("x")
+	r.Git(r.Main, "fetch")
+	if !own(r, "x") {
+		t.Fatal("a teammate's branch merged with --no-ff is own work")
+	}
+}
+
+func TestHasOwnCommitsFastForwardAfterReflogExpiredIsNotOwn(t *testing.T) {
+	r := gittest.New(t)
+	wt := r.AddWorktree("feat")
+	r.Commit(r.Main, "other.txt", "other")
+	r.Git(r.Main, "push", "origin", "main")
+	r.Git(r.Main, "fetch")
+	r.Git(wt, "merge", "--ff-only", "origin/main")
+	r.Git(r.Main, "reflog", "expire", "--expire=now", "--all")
+	if own(r, "feat") {
+		t.Fatal("fast-forward from base is not own work")
+	}
+}
