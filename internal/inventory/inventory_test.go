@@ -245,3 +245,18 @@ func TestReflogTime(t *testing.T) {
 		t.Errorf("empty reflog: %v, %v", got, err)
 	}
 }
+
+func TestLoadBranchNamedLikeATag(t *testing.T) {
+	r := gittest.New(t)
+	wt := r.AddWorktree("feat-a")
+	r.Git(r.Main, "tag", "feat-a")
+	r.Git(r.Main, "tag", "main")
+	inv := load(t, r)
+	a := find(inv, "feat-a")
+	if a == nil || a.Worktree == nil || a.Worktree.Path != wt {
+		t.Fatalf("feat-a: %+v (branches %+v)", a, inv.Branches)
+	}
+	if len(inv.Branches) != 1 {
+		t.Fatalf("main must still be left out: %+v", inv.Branches)
+	}
+}

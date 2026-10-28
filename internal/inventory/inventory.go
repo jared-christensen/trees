@@ -139,7 +139,7 @@ func Load(ctx context.Context, mainPath string, opt Options) (*Inventory, error)
 		}
 	}
 
-	const format = "%(refname:short)%09%(objectname)%09%(upstream:short)%09%(upstream:track)%09%(committerdate:unix)"
+	const format = "%(refname:lstrip=2)%09%(objectname)%09%(upstream:short)%09%(upstream:track)%09%(committerdate:unix)"
 	refs, err := g.Run(ctx, "for-each-ref", "--format="+format, "refs/heads")
 	if err != nil {
 		return nil, err
