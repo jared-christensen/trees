@@ -27,7 +27,7 @@ changelog:
       - "^docs:"
       - "^chore:"
 
-brews:
+homebrew_casks:
   - name: trees
     repository:
       owner: jared-christensen
@@ -36,10 +36,13 @@ brews:
     homepage: https://github.com/jared-christensen/trees
     description: List, clean, create and switch git worktrees
     license: MIT
-    dependencies:
-      - name: git
-    test: |
-      system "#{bin}/trees", "--help"
+    hooks:
+      post:
+        # The binary isn't signed or notarized, so clear macOS quarantine.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/trees"]
+          end
 
 release:
   github:
