@@ -227,3 +227,21 @@ func TestLoadBareLayout(t *testing.T) {
 		t.Fatalf("feat: %+v", f)
 	}
 }
+
+func TestReflogTime(t *testing.T) {
+	r := gittest.New(t)
+	r.CommitAt(r.Main, "old.txt", "old", time.Now().AddDate(-1, 0, 0))
+	r.Git(r.Main, "branch", "fresh")
+	g := git.Runner{Dir: r.Main}
+	got, err := ReflogTime(context.Background(), g, "fresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(got); d < 0 || d > time.Hour {
+		t.Errorf("ReflogTime = %v, want about now", got)
+	}
+	r.Git(r.Main, "reflog", "expire", "--expire=now", "--all")
+	if got, err := ReflogTime(context.Background(), g, "fresh"); err != nil || !got.IsZero() {
+		t.Errorf("empty reflog: %v, %v", got, err)
+	}
+}

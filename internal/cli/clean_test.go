@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jared-christensen/trees/internal/git"
 	"github.com/jared-christensen/trees/internal/gittest"
@@ -522,5 +523,28 @@ func TestCleanKeepsLongLivedBranches(t *testing.T) {
 	}
 	if !branchExists(r, "develop") || !exists(dev) || !branchExists(r, "trunk") {
 		t.Errorf("a long-lived branch was deleted")
+	}
+}
+
+func TestFreshBranchFromOldMainIsNotStale(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	r.CommitAt(r.Main, "old.txt", "old work", time.Now().AddDate(-1, 0, 0))
+	r.Git(r.Main, "push", "origin", "main")
+	r.Git(r.Main, "worktree", "add", "-b", "fresh", filepath.Join(filepath.Dir(r.Main), "fresh"), "origin/main")
+
+	_, items, _, err := collect(context.Background(), r.Main, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Branch.Name != "fresh" {
+		t.Fatalf("items: %+v", items)
+	}
+	it := items[0]
+	if it.State != status.InUse || strings.Join(it.Reasons, "; ") != "nothing committed yet" {
+		t.Errorf("fresh branch: %v %v", it.State, it.Reasons)
+	}
+	if age := time.Since(it.Branch.LastCommit); age > time.Hour {
+		t.Errorf("fresh branch shows age %v", age)
 	}
 }

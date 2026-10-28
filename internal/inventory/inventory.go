@@ -202,6 +202,30 @@ func defaultBase(ctx context.Context, g git.Runner, hasRemote bool) (string, err
 	return "", errors.New("cannot determine the default branch (no origin/HEAD, main or master)")
 }
 
+// ReflogTime returns when the newest entry in branch's reflog was written:
+// the last time the branch was created or moved locally. It is the zero time
+// when there is no reflog. (The entry's own time, not %ct, which is the date
+// of the commit it points at.)
+func ReflogTime(ctx context.Context, g git.Runner, branch string) (time.Time, error) {
+	out, err := g.Run(ctx, "reflog", "show", "--date=unix", "--format=%gd", "-n1", "refs/heads/"+branch)
+	if err != nil {
+		return time.Time{}, err
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return time.Time{}, nil
+	}
+	i := strings.LastIndex(out, "@{")
+	if i < 0 || !strings.HasSuffix(out, "}") {
+		return time.Time{}, fmt.Errorf("unexpected reflog entry %q", out)
+	}
+	secs, err := strconv.ParseInt(out[i+2:len(out)-1], 10, 64)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("unexpected reflog entry %q", out)
+	}
+	return time.Unix(secs, 0), nil
+}
+
 // Status runs `git status --porcelain` in dir. Untracked files and submodule
 // changes are always included, whatever the user's status settings say, so a
 // worktree with work in it never looks clean.

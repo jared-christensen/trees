@@ -59,6 +59,7 @@ func collect(ctx context.Context, cwd string, fetch, prs bool) (*inventory.Inven
 	type check struct {
 		merged, own bool
 		err         error
+		touched     time.Time // newest reflog entry; set only when !own
 	}
 	checks := make([]check, len(inv.Branches))
 	var wg sync.WaitGroup
@@ -70,7 +71,14 @@ func collect(ctx context.Context, cwd string, fetch, prs bool) (*inventory.Inven
 			defer wg.Done()
 			defer func() { <-sem }()
 			m, err := merged.IsMerged(ctx, r, inv.Base, "refs/heads/"+name)
-			checks[i] = check{merged: m, err: err, own: merged.HasOwnCommits(ctx, r, inv.Base, name)}
+			c := check{merged: m, err: err, own: merged.HasOwnCommits(ctx, r, inv.Base, name)}
+			if !c.own {
+				// A branch with nothing of its own has an old tip when it
+				// was just made from an old main, so its age is measured
+				// from when it was created or last moved.
+				c.touched, _ = inventory.ReflogTime(ctx, r, name)
+			}
+			checks[i] = c
 		}(i, b.Name)
 	}
 	wg.Wait()
@@ -79,6 +87,9 @@ func collect(ctx context.Context, cwd string, fetch, prs bool) (*inventory.Inven
 	now := time.Now()
 	items := make([]Item, len(inv.Branches))
 	for i, b := range inv.Branches {
+		if checks[i].touched.After(b.LastCommit) {
+			b.LastCommit = checks[i].touched
+		}
 		f := status.Facts{
 			Protected:    status.LongLived(b.Name),
 			OwnCommits:   checks[i].own,

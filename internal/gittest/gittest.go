@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Repo is a bare origin plus a clone of it with one commit on main. Both live
@@ -50,6 +51,11 @@ func New(t *testing.T) *Repo {
 // on the machine's git configuration.
 func (r *Repo) Git(dir string, args ...string) string {
 	r.t.Helper()
+	return r.gitEnv(dir, nil, args...)
+}
+
+func (r *Repo) gitEnv(dir string, env []string, args ...string) string {
+	r.t.Helper()
 	full := append([]string{
 		"-c", "user.name=Test User",
 		"-c", "user.email=test@example.com",
@@ -64,6 +70,7 @@ func (r *Repo) Git(dir string, args ...string) string {
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
 	)
+	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		r.t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
@@ -84,6 +91,22 @@ func (r *Repo) Commit(dir, file, msg string) string {
 	}
 	r.Git(dir, "add", file)
 	r.Git(dir, "commit", "-m", msg)
+	return r.Git(dir, "rev-parse", "HEAD")
+}
+
+// CommitAt is Commit with the author and committer dates set to when.
+func (r *Repo) CommitAt(dir, file, msg string, when time.Time) string {
+	r.t.Helper()
+	path := filepath.Join(dir, file)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		r.t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(msg+"\n"), 0o644); err != nil {
+		r.t.Fatal(err)
+	}
+	r.Git(dir, "add", file)
+	date := when.Format(time.RFC3339)
+	r.gitEnv(dir, []string{"GIT_AUTHOR_DATE=" + date, "GIT_COMMITTER_DATE=" + date}, "commit", "-m", msg)
 	return r.Git(dir, "rev-parse", "HEAD")
 }
 
