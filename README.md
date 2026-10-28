@@ -58,7 +58,7 @@ Branches not in any worktree
 
 | Command | What it does |
 | --- | --- |
-| `trees` / `trees list` | Show worktrees and branches and which are safe to delete. `--no-fetch` skips fetching, `--no-pr` skips pull request lookups. |
+| `trees` / `trees list` | Show worktrees and branches and which are safe to delete. `--no-fetch` skips fetching, `--no-pr` skips pull request lookups, `--json` prints the report as JSON for scripts. |
 | `trees clean` | Delete the safe-to-delete worktrees and branches after listing them and asking. It needs a successful fetch first, and deletes nothing if the remote can't be reached. It skips locked worktrees, the main checkout, the worktree you're in, and long-lived branches (`main`, `master`, `develop`, `trunk`). Before asking, it lists any ignored files (such as `.env`) that removing a folder will delete. `-y` skips the question, `--no-pr` skips pull request lookups. Remote branches are never touched. Each deletion prints a `git branch` command to restore it. |
 | `trees create <branch>` | Make a worktree and branch with matching names, run any configured `setup` commands, and go there. A new branch starts from the main branch after a fetch (`origin/main`, not a possibly outdated local `main`; if the remote can't be reached, from what was last fetched). If the branch already exists, locally or only on the remote, that branch is reused instead. |
 | `trees switch <name>` | Go to a worktree by branch or folder name. |
@@ -78,7 +78,7 @@ Rules are checked in this order, and the first match wins:
 4. Closed PR, or older than `stale_days`: **stale, take a look**.
 5. Anything else: **still in use**.
 
-A merged PR is shown as a reason, but a merged PR alone never makes a branch safe to delete: only the git check in rule 3 does. If the PR merged but the branch has changes that aren't in the main branch, the reasons say so. `trees list` always prints the reasons next to the state. Pull request lookups use the [GitHub CLI](https://cli.github.com) (`gh`) when it is installed; without it, or with `--no-pr`, only the git checks apply.
+A merged PR is shown as a reason, but a merged PR alone never makes a branch safe to delete: only the git check in rule 3 does. If the PR merged but the branch has changes that aren't in the main branch, the reasons say so. `trees list` always prints the reasons next to the state. Pull request lookups work for GitHub and Bitbucket Cloud. For GitHub, `trees` uses the [GitHub CLI](https://cli.github.com) (`gh`) when it is installed. For Bitbucket, set `BITBUCKET_USERNAME` (your Atlassian account email) and `BITBUCKET_TOKEN` (an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) with read access to pull requests; an app password in `BITBUCKET_APP_PASSWORD` also works). Without these, or with `--no-pr`, only the git checks apply.
 
 ## Config
 
@@ -88,7 +88,7 @@ Optional. `trees` reads `~/.config/trees/config.toml` (or `$XDG_CONFIG_HOME/tree
 [defaults]
 path = "{repo_parent}/{repo}.{name}"  # where new worktrees go (this is the default)
 stale_days = 14                       # age at which unfinished work is called stale
-pull_requests = true                  # look up PRs with gh
+pull_requests = true                  # look up PRs on GitHub or Bitbucket
 fetch_timeout_seconds = 5             # how long to wait on the remote
 
 [repos."/Users/me/code/app"]
@@ -100,10 +100,13 @@ after_switch = "code ."               # run after `trees switch`
 
 Unknown keys are an error, so typos don't go unnoticed.
 
+In a bare-repo layout (`<repo>/.bare` with worktrees beside it), new worktrees go in `<repo>/<name>` unless you set `path`. Worktrees Claude Code makes under `.claude/worktrees/` are listed by name with "(Claude)".
+
 ## Requirements
 
 - git 2.38 or newer
-- `gh` (optional) for pull request state
+- `gh` (optional) for GitHub pull request state
+- `BITBUCKET_USERNAME` and `BITBUCKET_TOKEN` (optional) for Bitbucket pull request state
 
 ## License
 
