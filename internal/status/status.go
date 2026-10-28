@@ -84,13 +84,15 @@ func Classify(f Facts) (State, []string) {
 	case f.Merged && state == SafeToDelete:
 		why = append(why, "merged into "+f.Base)
 	}
-	if f.Merged && state != SafeToDelete {
+	if f.Merged && f.OwnCommits && state != SafeToDelete {
 		why = append(why, "branch itself is already merged")
 	}
 	if f.ClosedPR > 0 {
 		why = append(why, fmt.Sprintf("PR #%d closed", f.ClosedPR))
 	}
-	if f.Unpushed > 0 {
+	// Commits on a merged branch, or one whose remote branch was deleted,
+	// were usually pushed once; "never pushed" would mislead.
+	if f.Unpushed > 0 && !f.Merged && !f.UpstreamGone {
 		why = append(why, plural(f.Unpushed, "commit", "commits")+" never pushed")
 	}
 	if f.UpstreamGone {

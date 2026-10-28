@@ -260,3 +260,25 @@ func TestMergeErrorIsNeverSafe(t *testing.T) {
 		t.Errorf("reasons %v lack the merge-check note", it.Reasons)
 	}
 }
+
+func TestCleanSkipsShellWorktreeWithRepoDir(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	done := mergedWorktree(r, "done")
+	sub := filepath.Join(done, "sub dir")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// As in `trees -C <main> clean` run from inside done's worktree.
+	res := clean(t, r.Main, "", cleanOptions{Yes: true, ShellDir: sub})
+	if res.code != 0 {
+		t.Fatalf("exit %d", res.code)
+	}
+	if !branchExists(r, "done") || !exists(done) {
+		t.Errorf("the shell's worktree was removed")
+	}
+	if !strings.Contains(res.out, "you're in its worktree") {
+		t.Errorf("output doesn't say why done was skipped")
+	}
+}

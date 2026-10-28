@@ -160,3 +160,25 @@ func TestLoadNotARepo(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestLoadUnreadableFolderIsAnError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores permissions")
+	}
+	r := gittest.New(t)
+	parent := filepath.Join(filepath.Dir(r.Main), "locked away")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r.Git(r.Main, "worktree", "add", "-b", "feat-a", filepath.Join(parent, "feat-a"))
+	if err := os.Chmod(parent, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	inv, err := Load(context.Background(), r.Main, Options{})
+	if err == nil {
+		w := find(inv, "feat-a").Worktree
+		t.Fatalf("want an error for an unreadable worktree folder, got %+v", w)
+	}
+}

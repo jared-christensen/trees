@@ -178,3 +178,26 @@ func TestRenderColor(t *testing.T) {
 		t.Errorf("want color codes with color on")
 	}
 }
+
+func TestRenderSkipsMainCheckoutAndCountsOnlyCleanable(t *testing.T) {
+	inv, items := fixture()
+	inv.MainBranch = "hotfix"
+	items = append(items,
+		Item{Branch: inventory.Branch{Name: "hotfix", LastCommit: time.Now(),
+			Worktree: &inventory.Worktree{Path: "/work/app", Branch: "hotfix"}},
+			State: status.SafeToDelete, Reasons: []string{"merged into origin/main"}},
+		Item{Branch: inventory.Branch{Name: "pinned", LastCommit: time.Now(),
+			Worktree: &inventory.Worktree{Path: "/work/app.pinned", Branch: "pinned", Locked: true}},
+			State: status.SafeToDelete, Reasons: []string{"merged into origin/main"}},
+	)
+	out := render(inv, items)
+	if strings.Contains(out, "branch hotfix") || strings.Contains(out, "  /work/app  ") {
+		t.Errorf("main checkout listed as an item:\n%s", out)
+	}
+	if !strings.Contains(out, "pinned (locked)") {
+		t.Errorf("locked worktree should still be listed:\n%s", out)
+	}
+	if !strings.Contains(out, "\n2 safe to delete. Run trees clean to remove them.\n") {
+		t.Errorf("footer should count only what clean would remove:\n%s", out)
+	}
+}

@@ -71,6 +71,9 @@ func Render(w io.Writer, inv *inventory.Inventory, items []Item, color bool) {
 
 	var withWT, without []Item
 	for _, it := range items {
+		if inMain(inv, it) {
+			continue // covered by the main checkout note
+		}
 		if it.Branch.Worktree != nil {
 			withWT = append(withWT, it)
 		} else {
@@ -115,7 +118,10 @@ func Render(w io.Writer, inv *inventory.Inventory, items []Item, color bool) {
 
 	safe := 0
 	for _, it := range items {
-		if it.State == status.SafeToDelete {
+		// Count what clean would remove: it leaves the main checkout's
+		// branch and locked worktrees alone.
+		locked := it.Branch.Worktree != nil && it.Branch.Worktree.Locked
+		if it.State == status.SafeToDelete && !inMain(inv, it) && !locked {
 			safe++
 		}
 	}
@@ -149,6 +155,12 @@ func reasons(w io.Writer, p painter, why []string) {
 		}
 	}
 	fmt.Fprintf(w, "      %s\n", strings.Join(parts, "; "))
+}
+
+// inMain reports whether the item's branch is checked out in the main checkout.
+func inMain(inv *inventory.Inventory, it Item) bool {
+	wt := it.Branch.Worktree
+	return wt != nil && filepath.Clean(wt.Path) == filepath.Clean(inv.Main)
 }
 
 func mainNote(inv *inventory.Inventory, defaultName string) string {

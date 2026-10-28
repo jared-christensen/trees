@@ -19,6 +19,9 @@ type cleanOptions struct {
 	Yes         bool // skip the prompt
 	NoPR        bool // skip pull request lookups
 	Interactive bool // stdin is a terminal, so the prompt can be answered
+	// ShellDir is the process's real working directory. It can differ from
+	// the repo directory given with -C; worktrees containing either are kept.
+	ShellDir string
 }
 
 // beforeDelete, when set, runs just before each target is re-verified. Tests
@@ -45,7 +48,10 @@ func runClean(ctx context.Context, cwd string, in io.Reader, out, errOut io.Writ
 		fmt.Fprintf(out, "No remote, comparing to local %s.\n", inv.Base)
 	}
 
-	here := canonical(cwd)
+	here := []string{canonical(cwd)}
+	if opt.ShellDir != "" {
+		here = append(here, canonical(opt.ShellDir))
+	}
 	var targets []Item
 	for _, it := range items {
 		if it.State != status.SafeToDelete {
@@ -133,7 +139,7 @@ func runClean(ctx context.Context, cwd string, in io.Reader, out, errOut io.Writ
 }
 
 // skipReason says why a safe-to-delete item must still be left alone, or "".
-func skipReason(inv *inventory.Inventory, it Item, here string) string {
+func skipReason(inv *inventory.Inventory, it Item, here []string) string {
 	wt := it.Branch.Worktree
 	if wt == nil {
 		return ""
@@ -144,8 +150,12 @@ func skipReason(inv *inventory.Inventory, it Item, here string) string {
 	if canonical(wt.Path) == canonical(inv.Main) {
 		return "it's checked out in the main checkout"
 	}
-	if !wt.Missing && within(here, canonical(wt.Path)) {
-		return "you're in its worktree (" + report.Tilde(wt.Path) + ")"
+	if !wt.Missing {
+		for _, h := range here {
+			if within(h, canonical(wt.Path)) {
+				return "you're in its worktree (" + report.Tilde(wt.Path) + ")"
+			}
+		}
 	}
 	return ""
 }

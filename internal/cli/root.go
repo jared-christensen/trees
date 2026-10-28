@@ -82,7 +82,7 @@ func newRootCmd(version string, s streams) *cobra.Command {
 	root.SetIn(s.in)
 	root.SetOut(s.out)
 	root.SetErr(s.errOut)
-	root.PersistentFlags().StringVarP(&dir, "C", "C", "", "run as if trees was started in `path`")
+	root.PersistentFlags().StringVarP(&dir, "dir", "C", "", "run as if trees was started in `path`")
 	addListFlags(root)
 
 	list := &cobra.Command{
@@ -105,6 +105,9 @@ func newRootCmd(version string, s streams) *cobra.Command {
 			}
 			opt := cleanOpt
 			opt.Interactive = s.isTerminal(s.in)
+			if opt.ShellDir, err = os.Getwd(); err != nil {
+				return err
+			}
 			return asError(runClean(cmd.Context(), cwd, s.in, s.out, s.errOut, opt))
 		},
 	}

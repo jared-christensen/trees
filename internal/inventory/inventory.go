@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -80,11 +81,17 @@ func Load(ctx context.Context, mainPath string, opt Options) (*Inventory, error)
 		return nil, errors.New("git worktree list returned no worktrees")
 	}
 	for i := range wts {
-		if wts[i].Missing {
-			continue
-		}
+		// Stat even when git says prunable: git also says that for a folder
+		// it can't read, and an unreadable folder is not a missing one (a
+		// missing folder skips the dirty check), so refuse to guess.
 		if _, err := os.Stat(wts[i].Path); err != nil {
-			wts[i].Missing = true
+			if errors.Is(err, fs.ErrNotExist) {
+				wts[i].Missing = true
+				continue
+			}
+			return nil, fmt.Errorf("checking worktree folder: %w", err)
+		}
+		if wts[i].Missing {
 			continue
 		}
 		out, err := git.Runner{Dir: wts[i].Path}.Run(ctx, "status", "--porcelain")
