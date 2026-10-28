@@ -393,3 +393,40 @@ func TestListAndCleanBareLayout(t *testing.T) {
 		t.Errorf("wip or main worktree was removed")
 	}
 }
+
+func TestCleanDisclosesIgnoredFiles(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	r.Commit(r.Main, ".gitignore", ".env\n*.log\nnotes/\n")
+	r.Git(r.Main, "push", "origin", "main")
+	done := mergedWorktree(r, "done")
+	for _, f := range []string{".env", "a.log", "b.log", "notes/todo.md"} {
+		path := filepath.Join(done, f)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := mergedWorktree(r, "other")
+	if err := os.WriteFile(filepath.Join(other, ".env"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res := clean(t, r.Main, "n\n", cleanOptions{Interactive: true})
+	want := "  done  branch and folder " + done + "\n" +
+		"      also removes ignored files: .env, a.log, b.log and 1 more\n"
+	if !strings.Contains(res.out, want) {
+		t.Errorf("missing disclosure %q", want)
+	}
+	if !strings.Contains(res.out, "      also removes ignored files: .env\n") {
+		t.Errorf("missing disclosure for other")
+	}
+	if strings.Index(res.out, "also removes") > strings.Index(res.out, "Delete these") {
+		t.Errorf("disclosure must come before the prompt")
+	}
+	if !branchExists(r, "done") || !exists(filepath.Join(done, ".env")) {
+		t.Errorf("answering no deleted something")
+	}
+}

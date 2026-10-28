@@ -78,6 +78,9 @@ func runClean(ctx context.Context, cwd string, in io.Reader, out, errOut io.Writ
 			fmt.Fprintf(out, "  %s  branch, and the record of its missing folder %s\n", it.Branch.Name, report.Tilde(wt.Path))
 		default:
 			fmt.Fprintf(out, "  %s  branch and folder %s\n", it.Branch.Name, report.Tilde(wt.Path))
+			if note := ignoredNote(ctx, wt.Path); note != "" {
+				fmt.Fprintf(out, "      %s\n", note)
+			}
 		}
 	}
 
@@ -136,6 +139,24 @@ func runClean(ctx context.Context, cwd string, in io.Reader, out, errOut io.Writ
 		code = 1
 	}
 	return code
+}
+
+// ignoredNote names the ignored files (.env, local notes) that removing the
+// worktree at dir would delete along with it, or returns "" when there are none.
+func ignoredNote(ctx context.Context, dir string) string {
+	names, err := inventory.Ignored(ctx, dir)
+	if err != nil {
+		return "may also remove ignored files (couldn't list them)"
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	const shown = 3
+	note := "also removes ignored files: "
+	if len(names) <= shown {
+		return note + strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s%s and %d more", note, strings.Join(names[:shown], ", "), len(names)-shown)
 }
 
 // skipReason says why a safe-to-delete item must still be left alone, or "".

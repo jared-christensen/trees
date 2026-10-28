@@ -209,6 +209,22 @@ func Status(ctx context.Context, dir string) (string, error) {
 	return git.Runner{Dir: dir}.Run(ctx, "status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none")
 }
 
+// Ignored lists the ignored files and folders in the worktree at dir, as git
+// reports them (an ignored folder is one entry ending in "/").
+func Ignored(ctx context.Context, dir string) ([]string, error) {
+	out, err := git.Runner{Dir: dir}.Run(ctx, "status", "--porcelain", "--ignored", "--untracked-files=normal")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		if name, ok := strings.CutPrefix(line, "!! "); ok {
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
 func countLines(s string) int {
 	n := 0
 	for _, l := range strings.Split(s, "\n") {
