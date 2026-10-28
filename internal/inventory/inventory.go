@@ -139,11 +139,13 @@ func Load(ctx context.Context, mainPath string, opt Options) (*Inventory, error)
 		if secs, err := strconv.ParseInt(f[4], 10, 64); err == nil {
 			b.LastCommit = time.Unix(secs, 0)
 		}
-		n, err := g.Run(ctx, "rev-list", "--count", f[0], "--not", "--remotes")
-		if err != nil {
-			return nil, err
+		if inv.HasRemote {
+			n, err := g.Run(ctx, "rev-list", "--count", f[0], "--not", "--remotes")
+			if err != nil {
+				return nil, err
+			}
+			b.Unpushed, _ = strconv.Atoi(strings.TrimSpace(n))
 		}
-		b.Unpushed, _ = strconv.Atoi(strings.TrimSpace(n))
 		inv.Branches = append(inv.Branches, b)
 	}
 	return inv, nil

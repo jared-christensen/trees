@@ -133,14 +133,15 @@ func TestLoadDetached(t *testing.T) {
 
 func TestLoadNoRemote(t *testing.T) {
 	r := gittest.New(t)
+	wt := r.AddWorktree("feat-b")
+	r.Commit(wt, "b.txt", "b")
 	r.Git(r.Main, "remote", "remove", "origin")
-	r.Git(r.Main, "branch", "feat-b")
 	inv := load(t, r)
 	if inv.HasRemote || inv.Base != "main" || inv.FetchErr != nil {
 		t.Fatalf("%+v", inv)
 	}
-	if b := find(inv, "feat-b"); b == nil {
-		t.Fatalf("%+v", b)
+	if b := find(inv, "feat-b"); b == nil || b.Unpushed != 0 {
+		t.Fatalf("no remote must mean Unpushed 0: %+v", b)
 	}
 }
 
