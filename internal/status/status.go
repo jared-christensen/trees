@@ -28,6 +28,7 @@ func (s State) String() string {
 
 // Facts is everything Classify needs. PR numbers are 0 when there is none.
 type Facts struct {
+	Protected                  bool // a long-lived branch such as main or develop
 	CheckFailed                bool // the worktree folder couldn't be checked
 	Dirty                      int
 	OpenPR, MergedPR, ClosedPR int
@@ -37,6 +38,16 @@ type Facts struct {
 	Unpushed                   int
 	UpstreamGone               bool
 	Base                       string // name used in "merged into <base>"
+}
+
+// LongLived reports whether name is a long-lived branch (main, master,
+// develop, trunk), which is never safe to delete.
+func LongLived(name string) bool {
+	switch name {
+	case "main", "master", "develop", "trunk":
+		return true
+	}
+	return false
 }
 
 func plural(n int, one, many string) string {
@@ -53,7 +64,7 @@ func Classify(f Facts) (State, []string) {
 
 	var state State
 	switch {
-	case f.CheckFailed || f.Dirty > 0 || f.OpenPR > 0:
+	case f.Protected || f.CheckFailed || f.Dirty > 0 || f.OpenPR > 0:
 		state = InUse
 	case !f.OwnCommits:
 		if old {
@@ -70,6 +81,9 @@ func Classify(f Facts) (State, []string) {
 	}
 
 	var why []string
+	if f.Protected {
+		why = append(why, "long-lived branch")
+	}
 	if f.CheckFailed {
 		why = append(why, "couldn't check this worktree")
 	}

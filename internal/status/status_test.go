@@ -70,6 +70,10 @@ func TestClassify(t *testing.T) {
 			[]string{"nothing committed yet", "PR #9 merged"}},
 		{"merged PR, unpushed and closed", base(status.Facts{OwnCommits: true, MergedPR: 9, ClosedPR: 4, Unpushed: 1}), status.Stale,
 			[]string{"PR #9 merged", "has changes not in origin/main", "PR #4 closed", "1 commit never pushed"}},
+		{"long-lived branch merged never safe", base(status.Facts{Protected: true, OwnCommits: true, Merged: true}), status.InUse,
+			[]string{"long-lived branch", "branch itself is already merged"}},
+		{"long-lived branch old never stale", base(status.Facts{Protected: true, OwnCommits: true, LastCommit: now.Add(-40 * day)}), status.InUse,
+			[]string{"long-lived branch"}},
 		{"one unpushed", base(status.Facts{OwnCommits: true, Unpushed: 1}), status.InUse,
 			[]string{"1 commit never pushed"}},
 		{"check failed never safe", base(status.Facts{CheckFailed: true, OwnCommits: true, Merged: true}), status.InUse,
@@ -85,6 +89,17 @@ func TestClassify(t *testing.T) {
 				t.Errorf("reasons = %q, want %q", why, tc.why)
 			}
 		})
+	}
+}
+
+func TestLongLived(t *testing.T) {
+	for name, want := range map[string]bool{
+		"main": true, "master": true, "develop": true, "trunk": true,
+		"feat/main": false, "development": false, "Main": false,
+	} {
+		if got := status.LongLived(name); got != want {
+			t.Errorf("LongLived(%q) = %v, want %v", name, got, want)
+		}
 	}
 }
 

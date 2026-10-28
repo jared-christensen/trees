@@ -498,3 +498,29 @@ func TestCleanKeepsBranchWhenWorktreeRemoveFails(t *testing.T) {
 		t.Errorf("reported done as deleted")
 	}
 }
+
+func TestCleanKeepsLongLivedBranches(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	dev := mergedWorktree(r, "develop")
+	r.Git(r.Main, "branch", "trunk")
+	r.Git(r.Main, "push", "origin", "trunk")
+
+	_, items, _, err := collect(context.Background(), r.Main, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.State == status.SafeToDelete || it.Reasons[0] != "long-lived branch" {
+			t.Errorf("%s: %v %v", it.Branch.Name, it.State, it.Reasons)
+		}
+	}
+
+	res := clean(t, r.Main, "", cleanOptions{Yes: true})
+	if res.code != 0 {
+		t.Fatalf("exit %d", res.code)
+	}
+	if !branchExists(r, "develop") || !exists(dev) || !branchExists(r, "trunk") {
+		t.Errorf("a long-lived branch was deleted")
+	}
+}

@@ -80,6 +80,7 @@ func collect(ctx context.Context, cwd string, fetch, prs bool) (*inventory.Inven
 	items := make([]Item, len(inv.Branches))
 	for i, b := range inv.Branches {
 		f := status.Facts{
+			Protected:    status.LongLived(b.Name),
 			OwnCommits:   checks[i].own,
 			Merged:       checks[i].merged,
 			LastCommit:   b.LastCommit,

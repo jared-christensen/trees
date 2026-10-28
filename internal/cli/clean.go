@@ -185,6 +185,9 @@ func skipReason(inv *inventory.Inventory, it Item, here []string) string {
 // worktree is still clean and the branch is still merged. It returns why the
 // branch must be skipped, or "".
 func recheck(ctx context.Context, r git.Runner, base string, b inventory.Branch) string {
+	if status.LongLived(b.Name) {
+		return "it's a long-lived branch"
+	}
 	sha, err := r.Run(ctx, "rev-parse", "--verify", "refs/heads/"+b.Name)
 	if err != nil {
 		return "couldn't read the branch: " + err.Error()
