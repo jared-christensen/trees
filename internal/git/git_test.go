@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jared-christensen/trees/internal/git"
@@ -50,10 +51,27 @@ func TestRunnerErrorWrapsStderr(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
+	if !strings.Contains(err.Error(), "fatal: Needed a single revision") {
+		t.Fatalf("error does not contain git's stderr: %v", err)
+	}
 	if (git.Runner{Dir: r.Main}).Ok(context.Background(), "rev-parse", "--verify", "nope") {
 		t.Fatal("Ok should be false")
 	}
 	if !(git.Runner{Dir: r.Main}).Ok(context.Background(), "rev-parse", "--verify", "main") {
 		t.Fatal("Ok should be true")
+	}
+}
+
+func TestRunKeepsLeadingWhitespace(t *testing.T) {
+	r := gittest.New(t)
+	if err := os.WriteFile(filepath.Join(r.Main, "README.md"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := git.Runner{Dir: r.Main}.Run(context.Background(), "status", "--porcelain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out, " M") {
+		t.Fatalf("got %q, want prefix %q", out, " M")
 	}
 }

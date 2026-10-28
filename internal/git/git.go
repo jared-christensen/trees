@@ -16,8 +16,9 @@ import (
 // Runner runs git commands in Dir (the current directory when empty).
 type Runner struct{ Dir string }
 
-// Run runs git with args and returns trimmed stdout. A failure returns an
-// error that wraps git's stderr.
+// Run runs git with args and returns stdout with trailing newlines removed;
+// leading whitespace is kept (porcelain output depends on it). A failure
+// returns an error that wraps git's stderr.
 func (r Runner) Run(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = r.Dir
@@ -32,7 +33,7 @@ func (r Runner) Run(ctx context.Context, args ...string) (string, error) {
 		}
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, msg)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return strings.TrimRight(stdout.String(), "\r\n"), nil
 }
 
 // Ok reports whether git exits with code 0.
