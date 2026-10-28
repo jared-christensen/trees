@@ -16,12 +16,24 @@ func FolderName(branch string) string {
 	return strings.ReplaceAll(branch, "/", "-")
 }
 
+// DefaultPath is the built-in worktree location: beside the main checkout.
+const DefaultPath = "{repo_parent}/{repo}.{name}"
+
 // WorktreePath fills in tmpl for branch in the repository whose main checkout
-// is repoMain, expanding a leading "~".
-func WorktreePath(tmpl, repoMain, branch string) string {
+// is repoMain, expanding a leading "~". In a bare layout (repoMain is
+// <repo>/.bare) the repository is the folder holding it, and the default
+// location puts worktrees inside that folder, beside .bare.
+func WorktreePath(tmpl, repoMain string, bare bool, branch string) string {
+	root := repoMain
+	if bare {
+		root = filepath.Dir(repoMain)
+		if tmpl == DefaultPath {
+			return filepath.Join(root, FolderName(branch))
+		}
+	}
 	p := strings.NewReplacer(
-		"{repo_parent}", filepath.Dir(repoMain),
-		"{repo}", filepath.Base(repoMain),
+		"{repo_parent}", filepath.Dir(root),
+		"{repo}", filepath.Base(root),
 		"{name}", FolderName(branch),
 	).Replace(tmpl)
 	if p == "~" || strings.HasPrefix(p, "~/") {

@@ -2,7 +2,9 @@ package report
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -231,5 +233,66 @@ func TestRenderDetachedCouldNotBeChecked(t *testing.T) {
 	out := render(inv, items)
 	if !strings.Contains(out, "  review  at 0123456\n      couldn't check this worktree\n") {
 		t.Errorf("detached entry wrong:\n%s", out)
+	}
+}
+
+func TestFolder(t *testing.T) {
+	cases := []struct {
+		main string
+		bare bool
+		path string
+		want string
+	}{
+		{"/a/app", false, "/a/app.feat-x", "feat-x"},
+		{"/a/app", false, "/a/app/.claude/worktrees/fix-1", "fix-1 (Claude)"},
+		{"/a/app", false, "/a/app/wt/x", "wt/x"},
+		{"/a/app", false, "/b/elsewhere", "/b/elsewhere"},
+		{"/a/app/.bare", true, "/a/app/feat-x", "feat-x"},
+	}
+	for _, c := range cases {
+		if got := Folder(c.main, c.bare, c.path); got != c.want {
+			t.Errorf("Folder(%q, %v, %q) = %q, want %q", c.main, c.bare, c.path, got, c.want)
+		}
+	}
+	if got := folderName("/a/app", false, "/a/app/.claude/worktrees/fix-1"); got != "fix-1" {
+		t.Errorf("folderName for Claude worktree = %q, want fix-1", got)
+	}
+}
+
+func TestJSON(t *testing.T) {
+	inv, items := fixture()
+	var buf strings.Builder
+	if err := JSON(&buf, inv, items); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Repo     string `json:"repo"`
+		Branches []struct {
+			Name     string   `json:"name"`
+			State    string   `json:"state"`
+			Reasons  []string `json:"reasons"`
+			Worktree *struct {
+				Name string `json:"name"`
+			} `json:"worktree"`
+		} `json:"branches"`
+		Detached     []any `json:"detached_worktrees"`
+		SafeToDelete int   `json:"safe_to_delete"`
+	}
+	if err := json.Unmarshal([]byte(buf.String()), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, buf.String())
+	}
+	if got.Repo == "" || len(got.Branches) != len(items) || got.Detached == nil {
+		t.Errorf("unexpected report: %+v", got)
+	}
+	states := map[string]bool{"in_use": true, "stale": true, "safe_to_delete": true}
+	for _, b := range got.Branches {
+		if !states[b.State] || b.Reasons == nil {
+			t.Errorf("branch %s: state %q, reasons %v", b.Name, b.State, b.Reasons)
+		}
+	}
+	var text strings.Builder
+	Render(&text, inv, items, false)
+	if want := fmt.Sprintf("%d safe to delete.", got.SafeToDelete); got.SafeToDelete > 0 && !strings.Contains(text.String(), want) {
+		t.Errorf("JSON count %d disagrees with text:\n%s", got.SafeToDelete, text.String())
 	}
 }

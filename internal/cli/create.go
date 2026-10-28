@@ -6,14 +6,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/jared-christensen/trees/internal/config"
 	"github.com/jared-christensen/trees/internal/git"
 	"github.com/jared-christensen/trees/internal/inventory"
 	"github.com/jared-christensen/trees/internal/naming"
+	"github.com/jared-christensen/trees/internal/report"
 	"github.com/jared-christensen/trees/internal/shell"
 )
 
@@ -89,13 +88,13 @@ func runCreate(ctx context.Context, cwd, branch string, in io.Reader, out, errOu
 	}
 
 	// 5 (checked before any change). The target must not exist.
-	path := naming.WorktreePath(cfg.Path, mainPath, branch)
+	path := naming.WorktreePath(cfg.Path, mainPath, inv.Bare, branch)
 	if _, err := os.Lstat(path); err == nil {
 		fmt.Fprintf(errOut, "%s already exists.\n", path)
 		return 1
 	}
 
-	short := strings.TrimPrefix(filepath.Base(path), filepath.Base(mainPath)+".")
+	short := report.Folder(inv.Main, inv.Bare, path)
 
 	// 4. Add the worktree.
 	var args []string

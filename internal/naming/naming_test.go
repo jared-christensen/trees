@@ -14,18 +14,27 @@ func TestFolderName(t *testing.T) {
 }
 
 func TestWorktreePath(t *testing.T) {
-	got := WorktreePath("{repo_parent}/{repo}.{name}", "/a/has space/app", "ABC-1-x")
+	got := WorktreePath(DefaultPath, "/a/has space/app", false, "ABC-1-x")
 	if want := "/a/has space/app.ABC-1-x"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	got = WorktreePath("{repo_parent}/{repo}.{name}", "/a/app", "feat/y")
+	got = WorktreePath(DefaultPath, "/a/app", false, "feat/y")
 	if want := "/a/app.feat-y"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 	home, _ := os.UserHomeDir()
-	got = WorktreePath("~/wt/{repo}-{name}", "/a/app", "z")
+	got = WorktreePath("~/wt/{repo}-{name}", "/a/app", false, "z")
 	if want := filepath.Join(home, "wt", "app-z"); got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestWorktreePathBare(t *testing.T) {
+	if got, want := WorktreePath(DefaultPath, "/a/app/.bare", true, "feat/y"), "/a/app/feat-y"; got != want {
+		t.Errorf("default: got %q, want %q", got, want)
+	}
+	if got, want := WorktreePath("{repo_parent}/wt/{repo}-{name}", "/a/app/.bare", true, "z"), "/a/wt/app-z"; got != want {
+		t.Errorf("custom: got %q, want %q", got, want)
 	}
 }
 

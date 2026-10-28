@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/jared-christensen/trees/internal/naming"
 )
 
 // Settings are the effective settings for one repository.
@@ -47,7 +49,7 @@ type file struct {
 func Defaults() Settings {
 	t := true
 	return Settings{
-		Path:                "{repo_parent}/{repo}.{name}",
+		Path:                naming.DefaultPath,
 		NamePatternMode:     "warn",
 		StaleDays:           14,
 		PullRequests:        &t,

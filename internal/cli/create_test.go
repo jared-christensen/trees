@@ -198,3 +198,21 @@ func TestCreateRejects(t *testing.T) {
 		t.Errorf("warn: %+v", res)
 	}
 }
+
+func TestCreateBareLayout(t *testing.T) {
+	isolate(t)
+	cd := cdFileEnv(t)
+	r := gittest.New(t)
+	dir := r.BareLayout()
+	res := create(t, filepath.Join(dir, "main"), "feat/x")
+	if res.code != 0 {
+		t.Fatalf("exit %d", res.code)
+	}
+	want := filepath.Join(dir, "feat-x")
+	if got := readFile(t, cd); got != want {
+		t.Errorf("cd = %q, want %q (beside .bare, not .bare.feat-x)", got, want)
+	}
+	if !strings.Contains(res.out, "Created feat-x on branch feat/x") {
+		t.Errorf("want short name in output, got %q", res.out)
+	}
+}

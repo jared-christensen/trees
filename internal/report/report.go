@@ -87,9 +87,9 @@ func Render(w io.Writer, inv *inventory.Inventory, items []Item, color bool) {
 		fmt.Fprintf(w, "\n%s\n", p.paint(bold, "Worktrees"))
 		for _, it := range withWT {
 			wt := it.Branch.Worktree
-			name := Folder(inv.Main, wt.Path) + suffixes(*wt)
+			name := Folder(inv.Main, inv.Bare, wt.Path) + suffixes(*wt)
 			entry(w, p, it, name)
-			if folderName(inv.Main, wt.Path) != sanitize(it.Branch.Name) {
+			if folderName(inv.Main, inv.Bare, wt.Path) != sanitize(it.Branch.Name) {
 				fmt.Fprintf(w, "      branch %s\n", it.Branch.Name)
 			}
 			reasons(w, p, it.Reasons)
@@ -109,7 +109,7 @@ func Render(w io.Writer, inv *inventory.Inventory, items []Item, color bool) {
 			if len(head) > 7 {
 				head = head[:7]
 			}
-			fmt.Fprintf(w, "  %s%s  at %s\n", Folder(inv.Main, wt.Path), suffixes(wt), head)
+			fmt.Fprintf(w, "  %s%s  at %s\n", Folder(inv.Main, inv.Bare, wt.Path), suffixes(wt), head)
 			switch {
 			case wt.CheckErr != nil:
 				reasons(w, p, []string{"couldn't check this worktree"})
@@ -119,15 +119,7 @@ func Render(w io.Writer, inv *inventory.Inventory, items []Item, color bool) {
 		}
 	}
 
-	safe := 0
-	for _, it := range items {
-		// Count what clean would remove: it leaves the main checkout's
-		// branch and locked worktrees alone.
-		locked := it.Branch.Worktree != nil && it.Branch.Worktree.Locked
-		if it.State == status.SafeToDelete && !inMain(inv, it) && !locked {
-			safe++
-		}
-	}
+	safe := cleanable(inv, items)
 	fmt.Fprintln(w)
 	if safe == 0 {
 		fmt.Fprintln(w, "Nothing is safe to delete.")
@@ -158,6 +150,31 @@ func reasons(w io.Writer, p painter, why []string) {
 		}
 	}
 	fmt.Fprintf(w, "      %s\n", strings.Join(parts, "; "))
+}
+
+// cleanable counts what clean would remove: it leaves the main checkout's
+// branch and locked worktrees alone.
+func cleanable(inv *inventory.Inventory, items []Item) int {
+	n := 0
+	for _, it := range items {
+		locked := it.Branch.Worktree != nil && it.Branch.Worktree.Locked
+		if it.State == status.SafeToDelete && !inMain(inv, it) && !locked {
+			n++
+		}
+	}
+	return n
+}
+
+// stateKey is the state's name in JSON output.
+func stateKey(s status.State) string {
+	switch s {
+	case status.Stale:
+		return "stale"
+	case status.SafeToDelete:
+		return "safe_to_delete"
+	default:
+		return "in_use"
+	}
 }
 
 // inMain reports whether the item's branch is checked out in the main checkout.
@@ -222,25 +239,47 @@ func sortItems(items []Item) {
 }
 
 // Folder is how a worktree folder is shown: the part after "<repo>." for a
-// folder beside the main checkout named "<repo>.<name>", else the full path
-// with the home directory shortened to ~.
-func Folder(main, path string) string {
-	repo := filepath.Base(main)
-	if filepath.Dir(path) == filepath.Dir(main) {
-		if name, ok := strings.CutPrefix(filepath.Base(path), repo+"."); ok && name != "" {
-			return name
-		}
+// folder beside the main checkout named "<repo>.<name>"; the folder name for
+// one beside .bare in a bare layout; "<name> (Claude)" for one Claude Code
+// made under .claude/worktrees; the path from the main checkout for any other
+// folder inside it; else the full path with the home directory shortened to ~.
+func Folder(main string, bare bool, path string) string {
+	name, claude, ok := shortName(main, bare, path)
+	switch {
+	case claude:
+		return name + " (Claude)"
+	case ok:
+		return name
+	}
+	if rel, err := filepath.Rel(main, path); err == nil && !bare && rel != "." && !strings.HasPrefix(rel, "..") {
+		return rel
 	}
 	return Tilde(path)
 }
 
 // folderName is the folder's own name, without the "<repo>." prefix.
-func folderName(main, path string) string {
-	f := Folder(main, path)
-	if f == Tilde(path) {
-		return filepath.Base(path)
+func folderName(main string, bare bool, path string) string {
+	if name, _, ok := shortName(main, bare, path); ok {
+		return name
 	}
-	return f
+	return filepath.Base(path)
+}
+
+// shortName is the name trees shows for a folder in one of the known layouts.
+func shortName(main string, bare bool, path string) (name string, claude, ok bool) {
+	dir, base := filepath.Dir(path), filepath.Base(path)
+	if dir == filepath.Dir(main) {
+		if bare {
+			return base, false, true
+		}
+		if n, ok := strings.CutPrefix(base, filepath.Base(main)+"."); ok && n != "" {
+			return n, false, true
+		}
+	}
+	if !bare && dir == filepath.Join(main, ".claude", "worktrees") {
+		return base, true, true
+	}
+	return "", false, false
 }
 
 func sanitize(branch string) string { return strings.ReplaceAll(branch, "/", "-") }
