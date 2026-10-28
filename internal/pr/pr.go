@@ -27,19 +27,26 @@ type None struct{}
 // Lookup always returns an empty map.
 func (None) Lookup(context.Context, []string) map[string][]PR { return map[string][]PR{} }
 
-// Detect returns a GitHub provider when enabled, the remote is on github.com
-// and gh is on PATH; otherwise None.
+// Detect returns the provider for the remote's host when enabled: GitHub when
+// gh is on PATH, Bitbucket when BITBUCKET_USERNAME and BITBUCKET_TOKEN are
+// set. Otherwise None.
 func Detect(remoteURL string, enabled bool) Provider {
 	if !enabled {
 		return None{}
 	}
-	repo, ok := parseGitHubRemote(remoteURL)
-	if !ok {
-		return None{}
+	if repo, ok := parseGitHubRemote(remoteURL); ok {
+		path, err := lookPath("gh")
+		if err != nil {
+			return None{}
+		}
+		return newGitHub(path, repo)
 	}
-	path, err := lookPath("gh")
-	if err != nil {
-		return None{}
+	if repo, ok := parseBitbucketRemote(remoteURL); ok {
+		user, token, ok := bitbucketCredentials()
+		if !ok {
+			return None{}
+		}
+		return newBitbucket(repo, user, token)
 	}
-	return newGitHub(path, repo)
+	return None{}
 }

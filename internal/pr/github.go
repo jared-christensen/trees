@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -91,18 +92,31 @@ func groupPRs(data []byte) (map[string][]PR, error) {
 // https and ssh forms. Any other host (including GitHub Enterprise) is not
 // recognised.
 func parseGitHubRemote(remote string) (string, bool) {
+	return parseRemote(remote, "github.com")
+}
+
+// parseRemote returns the "owner/repo" path of a remote whose host is one of
+// hosts, in scp-like (git@host:o/r), https and ssh forms.
+func parseRemote(remote string, hosts ...string) (string, bool) {
 	remote = strings.TrimSpace(remote)
-	var path string
+	var host, path string
 	switch {
 	case strings.Contains(remote, "://"):
 		u, err := url.Parse(remote)
-		if err != nil || u.Hostname() != "github.com" {
+		if err != nil {
 			return "", false
 		}
-		path = u.Path
-	case strings.HasPrefix(remote, "git@github.com:"):
-		path = strings.TrimPrefix(remote, "git@github.com:")
+		host, path = u.Hostname(), u.Path
+	case strings.Contains(remote, ":"):
+		hostPart, rest, _ := strings.Cut(remote, ":")
+		if _, h, ok := strings.Cut(hostPart, "@"); ok {
+			hostPart = h
+		}
+		host, path = hostPart, rest
 	default:
+		return "", false
+	}
+	if !slices.Contains(hosts, host) {
 		return "", false
 	}
 	path = strings.TrimSuffix(strings.Trim(path, "/"), ".git")

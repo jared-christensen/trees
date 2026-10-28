@@ -113,7 +113,18 @@ func TestDetect(t *testing.T) {
 	if _, ok := Detect("https://github.com/o/r", false).(None); !ok {
 		t.Error("disabled should be None")
 	}
+	t.Setenv("BITBUCKET_USERNAME", "")
+	t.Setenv("BITBUCKET_TOKEN", "")
+	t.Setenv("BITBUCKET_APP_PASSWORD", "")
 	if _, ok := Detect("https://bitbucket.org/o/r", true).(None); !ok {
-		t.Error("non-github should be None")
+		t.Error("bitbucket without credentials should be None")
+	}
+	if _, ok := Detect("https://gitlab.com/o/r", true).(None); !ok {
+		t.Error("unknown host should be None")
+	}
+	t.Setenv("BITBUCKET_USERNAME", "me@example.com")
+	t.Setenv("BITBUCKET_TOKEN", "tok")
+	if b, ok := Detect("git@ssh.bitbucket.org:ws/r.git", true).(*Bitbucket); !ok || b.repo != "ws/r" {
+		t.Errorf("want Bitbucket provider for ws/r, got %#v", b)
 	}
 }
