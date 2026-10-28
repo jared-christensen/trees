@@ -430,3 +430,71 @@ func TestCleanDisclosesIgnoredFiles(t *testing.T) {
 		t.Errorf("answering no deleted something")
 	}
 }
+
+func TestCleanSkipsMainCheckoutBranch(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	r.Git(r.Main, "checkout", "-b", "side")
+	r.Commit(r.Main, "side.txt", "side work")
+	r.Git(r.Main, "push", "-u", "origin", "side")
+	r.SquashMerge("side")
+
+	_, items, _, err := collect(context.Background(), r.Main, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	safe := false
+	for _, it := range items {
+		safe = safe || (it.Branch.Name == "side" && it.State == status.SafeToDelete)
+	}
+	if !safe {
+		t.Fatalf("setup: side should classify as safe to delete")
+	}
+
+	res := clean(t, r.Main, "", cleanOptions{Yes: true})
+	if res.code != 0 {
+		t.Fatalf("exit %d", res.code)
+	}
+	if !branchExists(r, "side") || !exists(filepath.Join(r.Main, "side.txt")) {
+		t.Errorf("the main checkout's branch was deleted")
+	}
+	if !strings.Contains(res.out, "Skipping side: it's checked out in the main checkout.") {
+		t.Errorf("output doesn't say why side was skipped")
+	}
+}
+
+func TestCleanKeepsBranchWhenWorktreeRemoveFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores permissions")
+	}
+	isolate(t)
+	r := gittest.New(t)
+	parent := filepath.Join(filepath.Dir(r.Main), "read only")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(parent, "done")
+	r.Git(r.Main, "worktree", "add", "-b", "done", wt)
+	r.Commit(wt, "done.txt", "work on done")
+	r.Git(wt, "push", "-u", "origin", "done")
+	r.SquashMerge("done")
+	// The folder can't be removed from a parent that isn't writable.
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	res := clean(t, r.Main, "", cleanOptions{Yes: true})
+	if res.code != 1 {
+		t.Errorf("want exit 1, got %d", res.code)
+	}
+	if !branchExists(r, "done") {
+		t.Errorf("branch was deleted although its folder couldn't be removed")
+	}
+	if !strings.Contains(res.errOut, "Couldn't remove the folder for done, so its branch was kept") {
+		t.Errorf("missing failure message")
+	}
+	if strings.Contains(res.out, "✓ done") {
+		t.Errorf("reported done as deleted")
+	}
+}
