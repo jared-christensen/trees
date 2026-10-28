@@ -172,7 +172,7 @@ func recheck(ctx context.Context, r git.Runner, base string, b inventory.Branch)
 		return "the branch changed since it was checked"
 	}
 	if wt := b.Worktree; wt != nil && !wt.Missing {
-		st, err := git.Runner{Dir: wt.Path}.Run(ctx, "status", "--porcelain")
+		st, err := inventory.Status(ctx, wt.Path)
 		if err != nil {
 			return "couldn't check its folder for uncommitted files: " + err.Error()
 		}

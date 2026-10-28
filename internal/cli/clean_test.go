@@ -282,3 +282,28 @@ func TestCleanSkipsShellWorktreeWithRepoDir(t *testing.T) {
 		t.Errorf("output doesn't say why done was skipped")
 	}
 }
+
+func TestCleanKeepsUntrackedWhenStatusHidesThem(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	r.Git(r.Main, "config", "status.showUntrackedFiles", "no")
+	done := mergedWorktree(r, "done")
+	if err := os.WriteFile(filepath.Join(done, "notes.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, items, _, err := collect(context.Background(), r.Main, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Branch.Name == "done" && it.State == status.SafeToDelete {
+			t.Errorf("worktree with an untracked file is safe to delete: %v", it.Reasons)
+		}
+	}
+
+	clean(t, r.Main, "", cleanOptions{Yes: true})
+	if !branchExists(r, "done") || !exists(filepath.Join(done, "notes.txt")) {
+		t.Errorf("untracked file was deleted")
+	}
+}

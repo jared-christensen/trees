@@ -94,7 +94,7 @@ func Load(ctx context.Context, mainPath string, opt Options) (*Inventory, error)
 		if wts[i].Missing {
 			continue
 		}
-		out, err := git.Runner{Dir: wts[i].Path}.Run(ctx, "status", "--porcelain")
+		out, err := Status(ctx, wts[i].Path)
 		if err != nil {
 			return nil, err
 		}
@@ -181,6 +181,13 @@ func defaultBase(ctx context.Context, g git.Runner, hasRemote bool) (string, err
 		}
 	}
 	return "", errors.New("cannot determine the default branch (no origin/HEAD, main or master)")
+}
+
+// Status runs `git status --porcelain` in dir. Untracked files and submodule
+// changes are always included, whatever the user's status settings say, so a
+// worktree with work in it never looks clean.
+func Status(ctx context.Context, dir string) (string, error) {
+	return git.Runner{Dir: dir}.Run(ctx, "status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none")
 }
 
 func countLines(s string) int {
