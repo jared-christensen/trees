@@ -114,7 +114,30 @@ func newRootCmd(version string, s streams) *cobra.Command {
 	clean.Flags().BoolVarP(&cleanOpt.Yes, "yes", "y", false, "delete without asking")
 	clean.Flags().BoolVar(&cleanOpt.NoPR, "no-pr", false, "skip pull request lookups")
 
-	root.AddCommand(list, clean)
+	sw := &cobra.Command{
+		Use:   "switch <name>",
+		Short: "Go to a worktree by branch or folder name",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := workDir()
+			if err != nil {
+				return err
+			}
+			return asError(runSwitch(cmd.Context(), cwd, args[0], s.out, s.errOut))
+		},
+	}
+
+	initCmd := &cobra.Command{
+		Use:   "init <zsh|bash>",
+		Short: "Print the shell function that lets switch change directories",
+		Long:  "Print the shell function that lets switch change directories.\nAdd to your shell config: eval \"$(trees init zsh)\"",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return asError(runInit(args[0], s.out, s.errOut))
+		},
+	}
+
+	root.AddCommand(list, clean, sw, initCmd)
 	return root
 }
 
