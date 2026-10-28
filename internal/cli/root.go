@@ -127,6 +127,19 @@ func newRootCmd(version string, s streams) *cobra.Command {
 		},
 	}
 
+	createCmd := &cobra.Command{
+		Use:   "create <branch>",
+		Short: "Make a worktree and branch with matching names, then go there",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := workDir()
+			if err != nil {
+				return err
+			}
+			return asError(runCreate(cmd.Context(), cwd, args[0], s.in, s.out, s.errOut))
+		},
+	}
+
 	initCmd := &cobra.Command{
 		Use:   "init <zsh|bash>",
 		Short: "Print the shell function that lets switch change directories",
@@ -137,7 +150,7 @@ func newRootCmd(version string, s streams) *cobra.Command {
 		},
 	}
 
-	root.AddCommand(list, clean, sw, initCmd)
+	root.AddCommand(list, clean, sw, createCmd, initCmd)
 	return root
 }
 
