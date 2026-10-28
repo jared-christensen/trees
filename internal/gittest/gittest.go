@@ -108,3 +108,15 @@ func (r *Repo) SquashMerge(branch string) {
 	r.Git(scratch, "commit", "-m", "squash "+branch)
 	r.Git(scratch, "push", "origin", "main")
 }
+
+// Merge merges branch (from Main) into main in the origin with --no-ff, using
+// a scratch clone, and pushes the result. Main is not updated.
+func (r *Repo) Merge(branch string) {
+	r.t.Helper()
+	scratch := filepath.Join(r.root, "merge-"+branch)
+	r.Git(r.root, "clone", r.Origin, scratch)
+	r.Git(scratch, "checkout", "main")
+	r.Git(scratch, "fetch", r.Main, branch)
+	r.Git(scratch, "merge", "--no-ff", "-m", "merge "+branch, "FETCH_HEAD")
+	r.Git(scratch, "push", "origin", "main")
+}
