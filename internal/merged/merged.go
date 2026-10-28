@@ -106,11 +106,13 @@ func HasOwnCommits(ctx context.Context, r git.Runner, base, branch string) bool 
 		return false
 	}
 	// Every candidate, the tip included, is an ancestor of base.
-	firstParent, err := r.Run(ctx, "rev-list", "--first-parent", base)
+	// Excluding the tip's parents stops the walk at the tip's age, so this
+	// lists only base's first-parent commits newer than the tip.
+	tip = strings.TrimSpace(tip)
+	firstParent, err := r.Run(ctx, "rev-list", "--first-parent", base, "--not", tip+"^@")
 	if err != nil {
 		return false
 	}
-	tip = strings.TrimSpace(tip)
 	for _, sha := range strings.Split(firstParent, "\n") {
 		if strings.TrimSpace(sha) == tip {
 			return false
