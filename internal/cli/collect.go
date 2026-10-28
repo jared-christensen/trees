@@ -91,6 +91,7 @@ func collect(ctx context.Context, cwd string, fetch, prs bool) (*inventory.Inven
 		}
 		if b.Worktree != nil {
 			f.Dirty = b.Worktree.Dirty
+			f.CheckFailed = b.Worktree.CheckErr != nil
 		}
 		f.OpenPR, f.MergedPR, f.ClosedPR = newestPRs(prsByBranch[b.Name])
 		items[i] = classify(b, f, checks[i].err)

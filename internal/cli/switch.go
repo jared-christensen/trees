@@ -15,11 +15,16 @@ import (
 	"github.com/jared-christensen/trees/internal/shell"
 )
 
-// switchable lists the worktrees switch can go to: the main checkout, every
-// branch's worktree, and detached ones. Missing folders are left out.
+// switchable lists the worktrees switch can go to: the main checkout (none in
+// a bare layout), every branch's worktree, detached ones, then any other
+// checkout, such as a bare layout's default-branch worktree. Missing folders
+// are left out.
 func switchable(inv *inventory.Inventory) []inventory.Worktree {
-	wts := []inventory.Worktree{{Path: inv.Main, Branch: inv.MainBranch}}
+	var wts []inventory.Worktree
 	seen := map[string]bool{inv.Main: true}
+	if !inv.Bare {
+		wts = append(wts, inventory.Worktree{Path: inv.Main, Branch: inv.MainBranch})
+	}
 	add := func(w inventory.Worktree) {
 		if w.Missing || seen[w.Path] {
 			return
@@ -33,6 +38,9 @@ func switchable(inv *inventory.Inventory) []inventory.Worktree {
 		}
 	}
 	for _, w := range inv.Detached {
+		add(w)
+	}
+	for _, w := range inv.Worktrees {
 		add(w)
 	}
 	return wts

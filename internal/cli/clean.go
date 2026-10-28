@@ -171,6 +171,9 @@ func recheck(ctx context.Context, r git.Runner, base string, b inventory.Branch)
 	if strings.TrimSpace(sha) != b.SHA {
 		return "the branch changed since it was checked"
 	}
+	if wt := b.Worktree; wt != nil && wt.CheckErr != nil {
+		return "couldn't check its folder: " + wt.CheckErr.Error()
+	}
 	if wt := b.Worktree; wt != nil && !wt.Missing {
 		st, err := inventory.Status(ctx, wt.Path)
 		if err != nil {

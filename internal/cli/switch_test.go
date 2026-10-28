@@ -175,3 +175,22 @@ func TestShellWrapperEndToEnd(t *testing.T) {
 		t.Errorf("output:\n%s\nwant rc=0, %s, rc=1, %s", out, wt, wt)
 	}
 }
+
+func TestSwitchBareLayout(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	dir := r.BareLayout()
+	cdFile := filepath.Join(t.TempDir(), "cd")
+	t.Setenv("TREES_CD_FILE", cdFile)
+
+	var out, errOut bytes.Buffer
+	if code := runSwitch(context.Background(), dir, "main", &out, &errOut); code != 0 {
+		t.Fatalf("switch main: %d %s", code, errOut.String())
+	}
+	if got, _ := os.ReadFile(cdFile); string(got) != filepath.Join(dir, "main") {
+		t.Errorf("cd file = %q, want the main worktree", got)
+	}
+	if code := runSwitch(context.Background(), dir, ".bare", &out, &errOut); code != 1 {
+		t.Errorf("the bare repository is not a worktree to switch to")
+	}
+}

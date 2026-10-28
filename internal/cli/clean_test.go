@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jared-christensen/trees/internal/git"
 	"github.com/jared-christensen/trees/internal/gittest"
 	"github.com/jared-christensen/trees/internal/inventory"
 	"github.com/jared-christensen/trees/internal/status"
@@ -305,5 +306,90 @@ func TestCleanKeepsUntrackedWhenStatusHidesThem(t *testing.T) {
 	clean(t, r.Main, "", cleanOptions{Yes: true})
 	if !branchExists(r, "done") || !exists(filepath.Join(done, "notes.txt")) {
 		t.Errorf("untracked file was deleted")
+	}
+}
+
+func TestListAndCleanSurviveUncheckableWorktree(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	done := mergedWorktree(r, "done")
+	broken := mergedWorktree(r, "broken")
+	// A broken .git file makes status fail in that worktree only.
+	if err := os.WriteFile(filepath.Join(broken, ".git"), []byte("gitdir: /nowhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := runList(context.Background(), r.Main, &out, &errOut, listOptions{NoPR: true}); code != 0 {
+		t.Fatalf("list failed: %d\n%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "couldn't check this worktree") {
+		t.Errorf("list doesn't say the worktree couldn't be checked:\n%s", out.String())
+	}
+
+	res := clean(t, r.Main, "", cleanOptions{Yes: true})
+	if res.code != 0 {
+		t.Fatalf("exit %d", res.code)
+	}
+	if !branchExists(r, "broken") || !exists(broken) {
+		t.Errorf("a worktree that couldn't be checked was removed")
+	}
+	if branchExists(r, "done") || exists(done) {
+		t.Errorf("done should still be cleaned")
+	}
+}
+
+func TestRecheckRefusesUncheckedWorktree(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	done := mergedWorktree(r, "done")
+	r.Git(r.Main, "fetch")
+	b := inventory.Branch{
+		Name:     "done",
+		SHA:      r.Git(r.Main, "rev-parse", "done"),
+		Worktree: &inventory.Worktree{Path: done, Branch: "done", CheckErr: errors.New("boom")},
+	}
+	if why := recheck(context.Background(), git.Runner{Dir: r.Main}, "origin/main", b); why == "" {
+		t.Errorf("recheck passed a worktree that couldn't be checked")
+	}
+}
+
+func TestListAndCleanBareLayout(t *testing.T) {
+	isolate(t)
+	r := gittest.New(t)
+	dir := r.BareLayout()
+	feat := filepath.Join(dir, "feat")
+	r.Git(dir, "worktree", "add", "-b", "feat", feat)
+	r.Commit(feat, "feat.txt", "feat work")
+	r.Git(feat, "push", "-u", "origin", "feat")
+	wip := filepath.Join(dir, "wip")
+	r.Git(dir, "worktree", "add", "-b", "wip", wip)
+
+	// Merge feat in origin with a scratch clone.
+	scratch := filepath.Join(t.TempDir(), "scratch")
+	r.Git(dir, "clone", r.Origin, scratch)
+	r.Git(scratch, "merge", "--no-ff", "-m", "merge feat", "origin/feat")
+	r.Git(scratch, "push", "origin", "main")
+
+	var out, errOut bytes.Buffer
+	if code := runList(context.Background(), filepath.Join(dir, "main"), &out, &errOut, listOptions{NoPR: true}); code != 0 {
+		t.Fatalf("list failed: %d\n%s", code, errOut.String())
+	}
+	t.Logf("list:\n%s", out.String())
+	for _, want := range []string{"safe to delete", "wip"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("list output lacks %q", want)
+		}
+	}
+
+	res := clean(t, dir, "", cleanOptions{Yes: true})
+	if res.code != 0 {
+		t.Fatalf("exit %d", res.code)
+	}
+	if exists(feat) || r.Git(dir, "branch", "--list", "feat") != "" {
+		t.Errorf("feat should be cleaned")
+	}
+	if !exists(wip) || !exists(filepath.Join(dir, "main")) {
+		t.Errorf("wip or main worktree was removed")
 	}
 }

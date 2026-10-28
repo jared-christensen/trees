@@ -120,3 +120,22 @@ func (r *Repo) Merge(branch string) {
 	r.Git(scratch, "merge", "--no-ff", "-m", "merge "+branch, "FETCH_HEAD")
 	r.Git(scratch, "push", "origin", "main")
 }
+
+// BareLayout clones Origin into the bare-repo layout: a folder holding the
+// repository in .bare, a .git file pointing at it, and a worktree for main.
+// It returns the folder's path.
+func (r *Repo) BareLayout() string {
+	r.t.Helper()
+	dir := filepath.Join(r.root, "bare layout")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		r.t.Fatal(err)
+	}
+	r.Git(dir, "clone", "--bare", r.Origin, ".bare")
+	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: ./.bare\n"), 0o644); err != nil {
+		r.t.Fatal(err)
+	}
+	r.Git(dir, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+	r.Git(dir, "fetch", "origin")
+	r.Git(dir, "worktree", "add", "main", "main")
+	return dir
+}

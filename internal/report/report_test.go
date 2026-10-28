@@ -201,3 +201,35 @@ func TestRenderSkipsMainCheckoutAndCountsOnlyCleanable(t *testing.T) {
 		t.Errorf("footer should count only what clean would remove:\n%s", out)
 	}
 }
+
+func TestRenderMainCheckoutCouldNotBeChecked(t *testing.T) {
+	inv, items := fixture()
+	inv.MainCheckErr = errors.New("boom")
+	out := render(inv, items)
+	if !strings.Contains(out, "\nThe main checkout couldn't be checked for uncommitted files.\n") {
+		t.Errorf("missing main checkout note:\n%s", out)
+	}
+}
+
+func TestRenderBareLayout(t *testing.T) {
+	inv, items := fixture()
+	inv.Main = "/work/app/.bare"
+	inv.Bare = true
+	inv.MainBranch = ""
+	out := render(inv, items)
+	if strings.Contains(out, "The main checkout") {
+		t.Errorf("a bare repository has no main checkout to describe:\n%s", out)
+	}
+	if !strings.HasPrefix(out, "app  /work/app/.bare, compared to origin/main\n") {
+		t.Errorf("header should name the repo folder:\n%s", out)
+	}
+}
+
+func TestRenderDetachedCouldNotBeChecked(t *testing.T) {
+	inv, items := fixture()
+	inv.Detached = []inventory.Worktree{{Path: "/work/app.review", Head: "0123456789abcdef", Detached: true, CheckErr: errors.New("boom")}}
+	out := render(inv, items)
+	if !strings.Contains(out, "  review  at 0123456\n      couldn't check this worktree\n") {
+		t.Errorf("detached entry wrong:\n%s", out)
+	}
+}

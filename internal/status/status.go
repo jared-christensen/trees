@@ -28,6 +28,7 @@ func (s State) String() string {
 
 // Facts is everything Classify needs. PR numbers are 0 when there is none.
 type Facts struct {
+	CheckFailed                bool // the worktree folder couldn't be checked
 	Dirty                      int
 	OpenPR, MergedPR, ClosedPR int
 	OwnCommits, Merged         bool
@@ -52,7 +53,7 @@ func Classify(f Facts) (State, []string) {
 
 	var state State
 	switch {
-	case f.Dirty > 0 || f.OpenPR > 0:
+	case f.CheckFailed || f.Dirty > 0 || f.OpenPR > 0:
 		state = InUse
 	case !f.OwnCommits:
 		if old {
@@ -69,6 +70,9 @@ func Classify(f Facts) (State, []string) {
 	}
 
 	var why []string
+	if f.CheckFailed {
+		why = append(why, "couldn't check this worktree")
+	}
 	if f.Dirty > 0 {
 		why = append(why, plural(f.Dirty, "uncommitted file", "uncommitted files"))
 	}

@@ -55,7 +55,7 @@ func stateColor(s status.State) string {
 // when color is true.
 func Render(w io.Writer, inv *inventory.Inventory, items []Item, color bool) {
 	p := painter(color)
-	repo := filepath.Base(inv.Main)
+	repo := repoName(inv)
 	defaultName := strings.TrimPrefix(inv.Base, "origin/")
 
 	fmt.Fprintf(w, "%s  %s, compared to %s\n", p.paint(bold, repo), Tilde(inv.Main), inv.Base)
@@ -110,7 +110,10 @@ func Render(w io.Writer, inv *inventory.Inventory, items []Item, color bool) {
 				head = head[:7]
 			}
 			fmt.Fprintf(w, "  %s%s  at %s\n", Folder(inv.Main, wt.Path), suffixes(wt), head)
-			if wt.Dirty > 0 {
+			switch {
+			case wt.CheckErr != nil:
+				reasons(w, p, []string{"couldn't check this worktree"})
+			case wt.Dirty > 0:
 				reasons(w, p, []string{plural(wt.Dirty, "uncommitted file", "uncommitted files")})
 			}
 		}
@@ -163,7 +166,20 @@ func inMain(inv *inventory.Inventory, it Item) bool {
 	return wt != nil && filepath.Clean(wt.Path) == filepath.Clean(inv.Main)
 }
 
+// repoName is the repository's name: the main checkout's folder, or for a
+// bare layout like <repo>/.bare, the folder holding it.
+func repoName(inv *inventory.Inventory) string {
+	name := filepath.Base(inv.Main)
+	if inv.Bare && strings.HasPrefix(name, ".") {
+		return filepath.Base(filepath.Dir(inv.Main))
+	}
+	return name
+}
+
 func mainNote(inv *inventory.Inventory, defaultName string) string {
+	if inv.Bare {
+		return "" // no main checkout
+	}
 	var parts []string
 	switch inv.MainBranch {
 	case defaultName:
@@ -172,7 +188,9 @@ func mainNote(inv *inventory.Inventory, defaultName string) string {
 	default:
 		parts = append(parts, fmt.Sprintf("is on %s, not %s", inv.MainBranch, defaultName))
 	}
-	if inv.MainDirty > 0 {
+	if inv.MainCheckErr != nil {
+		parts = append(parts, "couldn't be checked for uncommitted files")
+	} else if inv.MainDirty > 0 {
 		parts = append(parts, "has "+plural(inv.MainDirty, "uncommitted file", "uncommitted files"))
 	}
 	if len(parts) == 0 {

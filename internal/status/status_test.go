@@ -68,6 +68,8 @@ func TestClassify(t *testing.T) {
 			[]string{"not merged yet"}},
 		{"one unpushed", base(status.Facts{OwnCommits: true, Unpushed: 1}), status.InUse,
 			[]string{"1 commit never pushed"}},
+		{"check failed never safe", base(status.Facts{CheckFailed: true, OwnCommits: true, Merged: true}), status.InUse,
+			[]string{"couldn't check this worktree", "branch itself is already merged"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -22,7 +22,9 @@ type Worktree struct {
 	Detached     bool
 	Missing      bool
 	Locked       bool
-	Dirty        int // count of `status --porcelain` lines; 0 when Missing
+	Bare         bool  // the repository itself in a bare layout, not a checkout
+	Dirty        int   // count of `status --porcelain` lines; 0 when Missing
+	CheckErr     error // why the folder couldn't be checked; then Dirty is unknown
 }
 
 // Branch is a local branch other than the default branch.
@@ -36,14 +38,17 @@ type Branch struct {
 
 // Inventory is a snapshot of the repository.
 type Inventory struct {
-	Main       string // main checkout path
-	MainBranch string // branch checked out in the main checkout
-	MainDirty  int
-	Base       string // e.g. "origin/main", or "main" with no remote
-	HasRemote  bool
-	FetchErr   error      // nil if fetched or skipped on purpose
-	Branches   []Branch   // excludes the default branch
-	Detached   []Worktree // linked worktrees with no branch
+	Main         string // main checkout path, or the repository in a bare layout
+	Bare         bool   // Main is a bare repository with no checkout of its own
+	MainBranch   string // branch checked out in the main checkout; "" when Bare
+	MainDirty    int
+	MainCheckErr error  // why the main checkout couldn't be checked
+	Base         string // e.g. "origin/main", or "main" with no remote
+	HasRemote    bool
+	FetchErr     error      // nil if fetched or skipped on purpose
+	Branches     []Branch   // excludes the default branch
+	Detached     []Worktree // linked worktrees with no branch
+	Worktrees    []Worktree // every checkout in git's order; excludes a bare repository
 }
 
 // Options controls Load.
@@ -53,8 +58,8 @@ type Options struct {
 }
 
 // Load gathers the inventory for the repository whose main checkout is
-// mainPath. A failed fetch is recorded in FetchErr; other git failures are
-// returned.
+// mainPath. A failed fetch is recorded in FetchErr, and a worktree that can't
+// be checked in its CheckErr; other git failures are returned.
 func Load(ctx context.Context, mainPath string, opt Options) (*Inventory, error) {
 	g := git.Runner{Dir: mainPath}
 	inv := &Inventory{}
@@ -81,28 +86,38 @@ func Load(ctx context.Context, mainPath string, opt Options) (*Inventory, error)
 		return nil, errors.New("git worktree list returned no worktrees")
 	}
 	for i := range wts {
+		if wts[i].Bare {
+			continue // the repository itself; there is no checkout to check
+		}
 		// Stat even when git says prunable: git also says that for a folder
 		// it can't read, and an unreadable folder is not a missing one (a
 		// missing folder skips the dirty check), so refuse to guess.
 		if _, err := os.Stat(wts[i].Path); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				wts[i].Missing = true
-				continue
+			} else {
+				wts[i].Missing = false
+				wts[i].CheckErr = fmt.Errorf("checking worktree folder: %w", err)
 			}
-			return nil, fmt.Errorf("checking worktree folder: %w", err)
+			continue
 		}
 		if wts[i].Missing {
 			continue
 		}
 		out, err := Status(ctx, wts[i].Path)
 		if err != nil {
-			return nil, err
+			wts[i].CheckErr = err
+			continue
 		}
 		wts[i].Dirty = countLines(out)
 	}
 	inv.Main = wts[0].Path
-	inv.MainBranch = wts[0].Branch
-	inv.MainDirty = wts[0].Dirty
+	inv.Bare = wts[0].Bare
+	if !inv.Bare {
+		inv.MainBranch = wts[0].Branch
+		inv.MainDirty = wts[0].Dirty
+		inv.MainCheckErr = wts[0].CheckErr
+	}
 
 	base, err := defaultBase(ctx, g, inv.HasRemote)
 	if err != nil {
@@ -113,6 +128,10 @@ func Load(ctx context.Context, mainPath string, opt Options) (*Inventory, error)
 
 	byBranch := map[string]*Worktree{}
 	for i := range wts {
+		if wts[i].Bare {
+			continue
+		}
+		inv.Worktrees = append(inv.Worktrees, wts[i])
 		if wts[i].Branch != "" {
 			byBranch[wts[i].Branch] = &wts[i]
 		} else if i > 0 {
@@ -221,6 +240,10 @@ func parseWorktrees(out string) []Worktree {
 		case "detached":
 			if cur != nil {
 				cur.Detached = true
+			}
+		case "bare":
+			if cur != nil {
+				cur.Bare = true
 			}
 		case "locked":
 			if cur != nil {

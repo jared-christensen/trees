@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jared-christensen/trees/internal/git"
 	"github.com/jared-christensen/trees/internal/gittest"
 )
 
@@ -161,7 +162,7 @@ func TestLoadNotARepo(t *testing.T) {
 	}
 }
 
-func TestLoadUnreadableFolderIsAnError(t *testing.T) {
+func TestLoadUnreadableFolderIsRecorded(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores permissions")
 	}
@@ -171,14 +172,58 @@ func TestLoadUnreadableFolderIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Git(r.Main, "worktree", "add", "-b", "feat-a", filepath.Join(parent, "feat-a"))
+	r.AddWorktree("feat-b")
 	if err := os.Chmod(parent, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
 
 	inv, err := Load(context.Background(), r.Main, Options{})
-	if err == nil {
-		w := find(inv, "feat-a").Worktree
-		t.Fatalf("want an error for an unreadable worktree folder, got %+v", w)
+	if err != nil {
+		t.Fatalf("one unreadable worktree must not fail Load: %v", err)
+	}
+	w := find(inv, "feat-a").Worktree
+	if w == nil || w.CheckErr == nil || w.Missing {
+		t.Fatalf("want CheckErr and not Missing, got %+v", w)
+	}
+	if b := find(inv, "feat-b").Worktree; b == nil || b.CheckErr != nil {
+		t.Fatalf("other worktrees are still checked: %+v", b)
+	}
+}
+
+func TestLoadStatusFailureIsRecorded(t *testing.T) {
+	r := gittest.New(t)
+	wt := r.AddWorktree("feat-a")
+	// A broken .git file makes status fail while the folder is readable.
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /nowhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inv, err := Load(context.Background(), r.Main, Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if w := find(inv, "feat-a").Worktree; w == nil || w.CheckErr == nil {
+		t.Fatalf("want CheckErr, got %+v", w)
+	}
+}
+
+func TestLoadBareLayout(t *testing.T) {
+	r := gittest.New(t)
+	dir := r.BareLayout()
+	r.Git(dir, "worktree", "add", "-b", "feat", "feat")
+	mainPath, err := git.MainCheckout(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, err := Load(context.Background(), mainPath, Options{Fetch: true})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !inv.Bare || inv.MainBranch != "" || inv.Base != "origin/main" {
+		t.Fatalf("unexpected header: %+v", inv)
+	}
+	f := find(inv, "feat")
+	if f == nil || f.Worktree == nil || f.Worktree.Path != filepath.Join(dir, "feat") || f.Worktree.CheckErr != nil {
+		t.Fatalf("feat: %+v", f)
 	}
 }
